@@ -1,0 +1,583 @@
+---
+title: "Case de Carteira Eficiente"
+output: html_notebook
+---
+
+# Preparação.
+
+Limpando o Console e o Global Environment.
+
+```{r}
+# Limpando o Console.
+cat("\014") 
+# Limpando o Global Environment.
+rm(list = ls())
+
+# Arquivo com os codigos de acoes a consultar (esse tem todas)
+csvFile = "/home/jrperin/Área de Trabalho/DataScience/analiseAcoesR/acoesCsv/out.txt"
+```
+
+# Importação e modelagem de dados.
+
+Instalando e ativando o pacote quantmod, para modelagem financeira.
+
+```{r}
+if (!require("jsonlite"))       { install.packages("jsonlite") }
+if (!require("quantmod"))       { install.packages("quantmod") }
+library("quantmod")
+library("jsonlite")
+# ls('package:quantmod')
+```
+
+Dando os nomes das empresas do portifólio que será analisado.
+
+```{r}
+papeis <- c("ABEV3.SA", "ITUB4.SA", "BBDC4.SA", "BBAS3.SA", "ITSA4.SA", "PETR3.SA", "PETR4.SA", "VALE3.SA", "CIEL3.SA", "BBSE3.SA", "RADL3.SA", "LAME4.SA", "RENT3.SA", "CSAN3.SA", "MDIA3.SA", "PCAR4.SA", "BRML3.SA", "ECOR3.SA", "HGTX3.SA", "HYPE3.SA", "KROT3.SA", "ABCB4.SA", "FIBR3.SA", "NATU3.SA", "EQTL3.SA", "TRPL4.SA", "MYPK3.SA", "WEGE3.SA", "BVMF3.SA", "VIVT4.SA", "BRKM5.SA", "GGBR4.SA", "IGTA3.SA", "GFSA3.SA", "GOLL4.SA", "USIM5.SA", "INEP4.SA", "UNIP6.SA", "COCE5.SA", "EMBR3.SA", "OIBR4.SA", "JBSS3.SA", "BRFS3.SA", "CYRE3.SA", "ESTC3.SA", "BRAP4.SA", "MRFG3.SA")
+#papeis
+
+papeis <- c("ABEV3.SA", "ITUB4.SA")
+
+#papeis <- read.csv(file = csvFile, header = F, sep = ",", quote = '"')
+#papeis
+#papeis <- papeis[,1]
+#Removendo duplicados
+#papeis = as.vector(papeis[!duplicated(papeis)])
+#papeis
+
+#Verificando se ha duplicados
+papeis[duplicated(papeis)]
+
+#,"VALE5.SA","ELPL4.SA","SUZB5.SA"
+```
+
+Importando da web (Yahoo) dados financeiros das empresas escolhidas.A função getSymbols faz exatamanete isso.
+
+```{r}
+for (papel in papeis){
+  url = paste("https://www.alphavantage.co/query?apikey=H210P55NPUWHP8HN&function=TIME_SERIES_DAILY_ADJUSTED&symbol=", papel, sep="")
+  print (url)
+  result <- fromJSON(url)
+  print(result)
+}
+# result <- fromJSON("https://www.alphavantage.co/query?apikey=H210P55NPUWHP8HN&function=TIME_SERIES_DAILY_ADJUSTED&&outputsize=full&symbol=PETR4.SA")
+
+```
+
+```{r}
+result
+```
+
+
+```{r}
+ help(getSymbols)
+getSymbols(papeis, from = "2018-03-19", to = "2018-04-09")
+```
+
+```{r}
+P = NULL
+# Cl = Preco de fechamento da acao
+tmp <- Cl(to.daily(eval(parse(text = 'PETR4.SA'))))
+   P <- cbind(P, tmp)
+   P
+```
+
+
+Obs.: Vamos usar apenas Preço e fechamento
+
+Agregando-se as informações de cada empresa na tabela P pelos fechamentos de cada período (mês, no caso).
+
+
+```{r}
+P <- NULL
+for(papel in papeis) {
+    # help(Cl) # A função Cl serve para extrair e transformar colunas de series 
+    # temporais de objetos OHLC (Open-High-Low-Close), que é como as informações
+    # financeiras são geralmente disponibilizadas.
+    # cl é a função do pacote quantmod para ficar só com o valor de fechamento 
+    # (close).
+    # help(eval) # A função eval resolve o seu argumento principal dentro de um
+    # ambiente.
+    #--------------------------------------------------------------------------
+    #---------------------------- Exemplos de eval ----------------------------
+    
+    #eval(2 ^ 2 ^ 3)
+    #mEx <- expression(2^2^3); mEx; 1 + eval(mEx)
+    #eval({ xx <- pi; xx^2}) ; xx
+
+    #--------------------------------------------------------------------------
+    # help(parse) # A função parse pede para analisar uma palavra (parse=analisar).
+   tmp <- Cl(to.daily(eval(parse(text = papel))))
+   P <- cbind(P, tmp)
+   }
+```
+
+Atribui-se o nome das empresas às colunas da tabela P.
+
+```{r}
+colnames(P) <- papeis
+```
+
+Calculando a diferença percentual mês a mês.
+
+```{r}
+# help(diff) # A função diff calcula a diferença de lags. 
+retornos <- (diff(P)/lag(P,k=1)) * 100
+retornos <- retornos[-1,]
+```
+
+Construindo as matrizes de média e covariância.
+
+```{r}
+media_retornos <- colMeans(retornos, na.rm = TRUE)
+cov_retornos <- cov(retornos)
+```
+
+# Visualizando de covariâncias e correlações.
+
+Visualizando a covariância dos papéis.
+
+```{r}
+require(lattice)
+levelplot(cov_retornos)
+```
+
+A correlação de papéis também pode ser construída e através dela se pode ver que papéis se relacionam mais. Observar as diferenças com relação à visualização correspondentes de covariâncias (acima).
+
+```{r}
+cor_retornos <-cor(retornos)
+require(lattice)
+levelplot(cor_retornos)
+```
+
+# Visualizando risco e retorno dos papéis isoladamente.
+
+```{r}
+# Risco X Retorno de papéis isolados.
+desvpad_retornos <- sqrt(diag(cov_retornos))
+risco_retorno <- cbind(media_retornos,desvpad_retornos)
+risco_retorno_df <- data.frame(risco_retorno)
+ativos <- rownames(risco_retorno_df)
+risco_retorno.condicao <- data.frame(matrix("Papéis isolados", nrow = nrow(risco_retorno)))
+risco_retorno_df <- cbind(risco_retorno.condicao, ativos, risco_retorno_df)
+rownames(risco_retorno_df) <- NULL
+names(risco_retorno_df)[1]<-paste("condicao")
+names(risco_retorno_df)[2]<-paste("carteira")
+names(risco_retorno_df)[3]<-paste("retorno_carteira")
+names(risco_retorno_df)[4]<-paste("desvpad_carteira")
+head(risco_retorno_df)
+#sapply(risco_retorno_df, class)
+library("ggplot2")
+ggplot(data = risco_retorno_df, aes(x = desvpad_carteira, y = retorno_carteira)) + 
+    geom_point(data = risco_retorno_df, colour = "blue") + 
+    geom_text(data = risco_retorno_df,aes(label=carteira),hjust=0, vjust=0, colour = "blue") + 
+    ggtitle("Risco X Retorno dos papéis considerados") + 
+    labs(x = "Risco (Desvio-padrão)", y = "Retorno Esperado") 
+```
+
+# Simulando e visualizando carteiras aleatórias.
+
+```{r}
+# Simulando carteiras aleatórias.
+simulacoes <- matrix(0,ncol = 3 + ncol(retornos))
+dimnames(simulacoes) <- list(NULL, c("cart.simulada",papeis,"retorno_carteira","desvpad_carteira"))
+cart.simulada <- 0
+for (i in 1:1000) {
+    cart.simulada <<- cart.simulada + 1
+    w <- c(runif(ncol(retornos)))
+    if (sum(w) == 0) { w <- w + 1e-2 }
+    w <- w / sum(w)
+    retorno_carteira <- w %*% media_retornos
+    desvpad_carteira <- sqrt(w %*% cov_retornos %*% w)
+    w <- matrix(w,nrow = 1)
+    linhanova <- cbind(cart.simulada, w, retorno_carteira, desvpad_carteira)
+    simulacoes <<- rbind(simulacoes, linhanova)
+}
+#head(simulacoes)
+simulacoes <- simulacoes[-1,]
+head(simulacoes)
+simulacoes.carteira <- simulacoes[,1]
+simulacoes.metricas <- simulacoes[, (ncol(simulacoes)-1):ncol(simulacoes)]
+risco_retorno.sims <-cbind(simulacoes.carteira,simulacoes.metricas)
+Simulacoes.condicao <- data.frame(matrix("Carteiras simuladas", nrow = nrow(simulacoes)))
+risco_retorno.sims_df <- data.frame(risco_retorno.sims)
+risco_retorno.sims_df <- cbind(Simulacoes.condicao, risco_retorno.sims_df)
+names(risco_retorno.sims_df)[1]<-paste("condicao")
+names(risco_retorno.sims_df)[2]<-paste("carteira")
+#head(risco_retorno.sims_df)
+#sapply(risco_retorno.sims_df, class)
+risco_retorno.sims_df$carteira <- as.factor(risco_retorno.sims_df$carteira)
+#sapply(risco_retorno.sims_df, class)
+head(risco_retorno.sims_df)
+ggplot(data = risco_retorno.sims_df, aes(x = desvpad_carteira, y = retorno_carteira)) + 
+    geom_point(data = risco_retorno.sims_df, colour = "red") + 
+    geom_text(data = risco_retorno.sims_df,aes(label=simulacoes.carteira),hjust=0, vjust=0, colour = "red") +
+    ggtitle("Risco X Retorno das carteiras simuladas") + 
+    labs(x = "Risco (Desvio-padrão)", y = "Retorno Esperado") 
+```
+
+# Definição da função objetivo.
+
+Para se encontrar uma solução ótima, esta deve ser guiada por uma função objetivo.
+
+```{r}
+# Observação1: o sinal de <<- é diferente de <-. <- atua somente sobre o ambiente
+# em que é definido. Já <<- atua também atualizando ambientes "pais".
+# Observação2: O sinal de = é diferente de ==. = é sinal de atribuição, usado dentro
+# de algumas funções como argumento. Já == é um operador lógico que verifica a igual-
+# dade e retorna TRUE ou FALSE.
+# Observação3: Se você quiser ver como funciona a função objetivo, usar 
+# w <- rep(0.2, ncol(retornos)).
+funcao_obj <- function(w) {
+    fn.call <<- fn.call + 1 # "<<-" é para atualizar uma variavel de fora da funcao.
+    if (sum(w) == 0) { w <- w + 1e-2 } # Evita a divisao por zero
+    w <- w / sum(w)
+    retorno_carteira <- w %*% media_retornos
+    desvpad_carteira <- sqrt(w %*% cov_retornos %*% w)
+    obj <- desvpad_carteira-retorno_carteira
+    return(obj)
+    }
+```
+
+# Encontrando e visualizando a suposta carteira ótima pelo método de otimização Simulated Annealing.
+
+Carregando o pacote GenSA, que é de Simulated Annealing.
+
+```{r}
+#install.packages("GenSA")
+library(GenSA)
+# help(GenSA)
+# ls('package:GenSA')
+```
+
+Executando Simulated Annealing para otimizar (minimizar, no caso) a função objetivo acima definida.
+
+```{r}
+# help(GenSA)
+set.seed(1234)
+fn.call <<- 0
+tempo_inicial <- Sys.time()
+resultado_GenSA <- GenSA(fn = funcao_obj, lower = rep(0, ncol(retornos)), upper = rep(1, ncol(retornos)), control = list(smooth = FALSE, max.call = 100000))
+tempo_final <- Sys.time()
+tempo_execucao <- tempo_final - tempo_inicial
+tempo_execucao
+```
+
+Avaliando resultados do Simulated Annealing:
+
+1) Número de calls da função objetivo.
+
+```{r}
+fn.call_GenSA <- fn.call
+resultado_GenSA$counts
+cat("GenSA chamou a função objetivo", fn.call_GenSA, "vezes.\n")
+```
+
+2) Valor final da função objetivo.
+
+```{r}
+resultado_GenSA$value
+```
+
+3) Percentuais ótimos de cada papel.
+
+```{r}
+w.otimo_GenSA <- resultado_GenSA$par
+w.otimo_GenSA <- w.otimo_GenSA / sum(w.otimo_GenSA)
+w.otimo_GenSA_ <- cbind(papeis, w.otimo = round(100 * w.otimo_GenSA, 2))
+w.otimo_GenSA_
+```
+
+4) Resultado da carteira otimizada. Retorno:
+
+```{r}
+retorno_carteira_otima <- sum(w.otimo_GenSA * media_retornos)
+retorno_carteira_otima
+```
+
+5) Resultado da carteira otimizada. Risco (variância):
+
+```{r}
+desvpad_carteira_otima <- sqrt(w.otimo_GenSA %*% cov_retornos %*% w.otimo_GenSA)
+desvpad_carteira_otima
+```
+
+6) Visualização dos resultados em Risco X Retorno.
+
+```{r}
+risco_retorno_otimo_df <- data.frame(matrix(c(retorno_carteira_otima,desvpad_carteira_otima),1,2))
+risco_retorno_otimo_df <- cbind("Carteira ótima","*",risco_retorno_otimo_df)
+names(risco_retorno_otimo_df)[1]<-paste("condicao")
+names(risco_retorno_otimo_df)[2]<-paste("carteira")
+names(risco_retorno_otimo_df)[3]<-paste("retorno_carteira")
+names(risco_retorno_otimo_df)[4]<-paste("desvpad_carteira")
+#sapply(risco_retorno_otimo_df, class)
+risco_retorno_total_df <- rbind(risco_retorno_df,risco_retorno.sims_df,risco_retorno_otimo_df)
+risco_retorno_total_df
+
+ggplot(data = risco_retorno_total_df, aes(x = desvpad_carteira, y = retorno_carteira, colour = condicao)) + 
+    geom_point(data = risco_retorno_total_df) +
+    ggtitle("Risco X Retorno das ações e carteiras") + 
+    labs(x = "Risco (Desvio-padrão)", y = "Retorno Esperado") 
+```
+
+# Executando novamente o Simulated Annealing, só que agora não ficando só com a resposta otimizada, mas também com as configurações.
+
+Desenhando uma segunda função objetivo. A diferença desta para a anterior é que esta guarda, a cada iteração, a carteira simulada e os resultados principais.
+Diga-se de passagem, este procedimento pode tornar a execução bem mais lenta.
+
+```{r}
+funcao_obj2 <- function(w) {
+    fn.call <<- fn.call + 1
+    if (sum(w) == 0) { w <- w + 1e-2 }
+    w <- w / sum(w)
+    retorno_carteira <- w %*% media_retornos
+    desvpad_carteira <- sqrt(w %*% cov_retornos %*% w)
+    w_matriz <- matrix(w,1,ncol(retornos))
+    GenSA_linha <- cbind(fn.call, w_matriz, retorno_carteira, desvpad_carteira)
+    GenSA_passoapasso <<- rbind(GenSA_passoapasso,GenSA_linha)
+    obj <- desvpad_carteira-retorno_carteira
+    return(obj)
+}
+```
+
+Executando o método de otimização Simulated Annealing novamente.
+
+```{r}
+set.seed(1234)
+fn.call <- 0
+w_matriz <- matrix(rep(0.0, ncol(retornos)),1,ncol(retornos))
+retorno_carteira <- 0
+desvpad_carteira <- 0
+GenSA_passoapasso <- cbind(fn.call, w_matriz, retorno_carteira, desvpad_carteira)
+resultado_GenSA <- GenSA(fn = funcao_obj2, lower = rep(0, ncol(retornos)), upper = rep(1, ncol(retornos)),
+                         control = list(smooth = FALSE, max.call = 10000))
+
+#head(GenSA_passoapasso)
+GenSA_passoapasso <- GenSA_passoapasso[-1,]
+head(GenSA_passoapasso)
+
+head(risco_retorno_total_df)
+```
+
+Preparação.
+
+```{r}
+carteira_GenSA_pap <- matrix(GenSA_passoapasso[,1],nrow(GenSA_passoapasso),1)
+#head(carteira_GenSA_pap)
+```
+
+Resultado do passo a passo do GenSA. Retorno:
+
+```{r}
+retorno_carteira_GenSA_pap <- matrix(GenSA_passoapasso[,(2+ncol(w_matriz))],nrow(GenSA_passoapasso),1)
+head(retorno_carteira_GenSA_pap)
+```
+
+Resultado do passo a passo do GenSA. Risco (variância):
+
+```{r}
+desvpad_carteira_GenSA_pap <- matrix(GenSA_passoapasso[,(3+ncol(w_matriz))],nrow(GenSA_passoapasso),1)
+head(desvpad_carteira_GenSA_pap)
+```
+
+Visualização dos resultados em Risco X Retorno.
+
+```{r}
+risco_retorno_GenSA_pap_df <- data.frame(cbind(carteira_GenSA_pap,retorno_carteira_GenSA_pap,desvpad_carteira_GenSA_pap))
+#head(risco_retorno_GenSA_pap_df)
+risco_retorno_GenSA_pap_df <- cbind("Passos do GenSA",risco_retorno_GenSA_pap_df)
+#head(risco_retorno_GenSA_pap_df)
+names(risco_retorno_GenSA_pap_df)[1]<-paste("condicao")
+names(risco_retorno_GenSA_pap_df)[2]<-paste("carteira")
+names(risco_retorno_GenSA_pap_df)[3]<-paste("retorno_carteira")
+names(risco_retorno_GenSA_pap_df)[4]<-paste("desvpad_carteira")
+#sapply(risco_retorno_GenSA_pap_df, class)
+risco_retorno_GenSA_pap_df$carteira <- as.factor(risco_retorno_GenSA_pap_df$carteira)
+#sapply(risco_retorno_GenSA_pap_df, class)
+risco_retorno_total_df_2 <- rbind(risco_retorno_total_df,risco_retorno_GenSA_pap_df)
+head(risco_retorno_total_df_2)
+
+ggplot(data = risco_retorno_total_df_2, aes(x = desvpad_carteira, y = retorno_carteira, colour = condicao)) + 
+    geom_point(data = risco_retorno_total_df_2) +
+    ggtitle("Risco X Retorno das ações e carteiras") + 
+    labs(x = "Risco (Desvio-padrão)", y = "Retorno Esperado")
+```
+
+# Outros resultados interessantes.
+
+Executando novamente o Simulated Annealing multiplas vezes, para obter a solução de mínimo risco, de máximo retorno e de várias soluções intermediárias (estas pelo critério de mínimo risco) para obter a fronteira eficiente.
+
+## Solução ótima de mínimo risco.
+
+Desenhando a função objetivo de mínimo risco.
+
+```{r}
+funcao_obj_riscomin <- function(w) {
+    fn.call <<- fn.call + 1
+    if (sum(w) == 0) { w <- w + 1e-2 }
+    w <- w / sum(w)
+    retorno_carteira <- w %*% media_retornos
+    desvpad_carteira <- sqrt(w %*% cov_retornos %*% w)
+    obj <- desvpad_carteira
+    return(obj)
+}
+```
+
+Executando Simulated Annealing para otimizar (minimizar, no caso) a função objetivo acima definida.
+
+```{r}
+# help(GenSA)
+set.seed(1234)
+fn.call <<- 0
+resultado_GenSA <- GenSA(fn = funcao_obj_riscomin, lower = rep(0, ncol(retornos)), upper = rep(1, ncol(retornos)),
+                         control = list(smooth = FALSE, max.call = 100000))
+
+w.otimo_GenSA <- resultado_GenSA$par
+w.otimo_GenSA <- w.otimo_GenSA / sum(w.otimo_GenSA)
+w.otimo_GenSA_ <- cbind(papeis, w.otimo = round(100 * w.otimo_GenSA, 2))
+w.otimo_GenSA_
+```
+
+Resultado da carteira otimizada. Retorno:
+
+```{r}
+minrisco_ret <- sum(w.otimo_GenSA * media_retornos)
+minrisco_ret
+```
+
+## Solução ótima de máximo retorno.
+
+Desenhando a função objetivo de máximo retorno.
+
+```{r}
+funcao_obj_retmax <- function(w) {
+    fn.call <<- fn.call + 1
+    if (sum(w) == 0) { w <- w + 1e-2 }
+    w <- w / sum(w)
+    retorno_carteira <- w %*% media_retornos
+    desvpad_carteira <- sqrt(w %*% cov_retornos %*% w)
+    obj <- -retorno_carteira
+    return(obj)
+}
+```
+
+Executando Simulated Annealing para otimizar (minimizar, no caso) a função objetivo acima definida.
+
+```{r}
+# help(GenSA)
+set.seed(1234)
+fn.call <<- 0
+resultado_GenSA <- GenSA(fn = funcao_obj_retmax, lower = rep(0, ncol(retornos)), upper = rep(1, ncol(retornos)),
+                         control = list(smooth = FALSE, max.call = 100000))
+
+w.otimo_GenSA <- resultado_GenSA$par
+w.otimo_GenSA <- w.otimo_GenSA / sum(w.otimo_GenSA)
+w.otimo_GenSA_ <- cbind(papeis, w.otimo = round(100 * w.otimo_GenSA, 2))
+w.otimo_GenSA_
+```
+
+Resultado da carteira otimizada. Retorno:
+
+```{r}
+maxret_ret <- sum(w.otimo_GenSA * media_retornos)
+maxret_ret
+```
+
+## Obtendo soluções com valores intermediários de retorno (fronteira eficiente).
+
+Definindo o vetor de valores intermediários de retorno.
+
+```{r}
+vec <- seq(minrisco_ret, maxret_ret, length.out = 100)
+head(vec)
+```
+
+Definindo a função objetivo de risco mínimo, que será utilizada para cada valor intermediário de retorno.
+
+```{r}
+funcao_obj_riscomin_2 <- function(w) {
+    if (sum(w) == 0) { w <- w + 1e-2 }
+    w <- w / sum(w)
+    retorno_carteira <- w %*% media_retornos
+    desvpad_carteira <- sqrt(w %*% cov_retornos %*% w)
+    obj <- desvpad_carteira + abs(retorno_carteira - retorno_carteira_vec_i)
+    return(obj)
+}
+```
+
+Rodando o procedimento.
+
+```{r}
+fn.call <<- 0
+w_matriz_fronteff <- matrix(rep(0.0, ncol(retornos)),1,ncol(retornos))
+retorno_carteira_fronteff <- c()
+desvpad_carteira_fronteff <- c()
+GenSA_fronteff <- cbind(fn.call, w_matriz_fronteff, retorno_carteira, desvpad_carteira)
+
+for(i in 1:length(vec)){
+    fn.call <<- i
+    retorno_carteira_vec_i <- vec[i]
+    resultado_GenSA_vec <- GenSA(fn = funcao_obj_riscomin_2, lower = rep(0, ncol(retornos)), upper = rep(1, ncol(retornos)),
+                             control = list(smooth = FALSE, max.call = 100000))
+    # Percentuais de cada papel.
+    w.vec <- resultado_GenSA_vec$par
+    w.vec <- w.vec / sum(w.vec)
+    # Resultado da carteira otimizada. Retorno:
+    retorno_carteira_vec <- sum(w.vec * media_retornos)
+    # Resultado da carteira otimizada. Risco (variância):
+    desvpad_carteira_vec <- sqrt(w.vec %*% cov_retornos %*% w.vec)
+    # Juntando os resultados.
+    GenSA_fronteff_linha <- cbind(fn.call, matrix(w.vec, ncol = length(w.vec)), retorno_carteira_vec, desvpad_carteira_vec)
+    GenSA_fronteff <<- rbind(GenSA_fronteff, GenSA_fronteff_linha)
+}
+
+#head(GenSA_fronteff)
+GenSA_fronteff <- GenSA_fronteff[-1,]
+head(GenSA_fronteff)
+
+head(risco_retorno_total_df)
+```
+
+Resultado da fronteira eficiente. Carteira:
+
+```{r}
+GenSA_fronteff_carteira <- matrix(GenSA_fronteff[,1],nrow(GenSA_fronteff),1)
+head(GenSA_fronteff_carteira)
+```
+
+Resultado da fronteira eficiente. Retorno:
+
+```{r}
+GenSA_fronteff_retorno <- matrix(GenSA_fronteff[,(2+length(w.vec))],nrow(GenSA_fronteff),1)
+head(GenSA_fronteff_retorno)
+```
+
+Resultado da fronteira eficiente. Risco (variância):
+
+```{r}
+GenSA_fronteff_desvpad <- matrix(GenSA_fronteff[,(3+length(w.vec))],nrow(GenSA_fronteff),1)
+head(GenSA_fronteff_desvpad)
+```
+
+Visualizando em Risco X Retorno.
+
+```{r}
+GenSA_fronteff_df <- data.frame(cbind(GenSA_fronteff_carteira,GenSA_fronteff_retorno,GenSA_fronteff_desvpad))
+#head(GenSA_fronteff_df)
+GenSA_fronteff_df <- cbind("Fronteira eficiente",GenSA_fronteff_df)
+#head(GenSA_fronteff_df)
+names(GenSA_fronteff_df)[1]<-paste("condicao")
+names(GenSA_fronteff_df)[2]<-paste("carteira")
+names(GenSA_fronteff_df)[3]<-paste("retorno_carteira")
+names(GenSA_fronteff_df)[4]<-paste("desvpad_carteira")
+#sapply(GenSA_fronteff_df, class)
+GenSA_fronteff_df$carteira <- as.factor(GenSA_fronteff_df$carteira)
+#sapply(GenSA_fronteff_df, class)
+risco_retorno_total_df_3 <- rbind(risco_retorno_total_df_2,GenSA_fronteff_df)
+head(risco_retorno_total_df_3)
+
+ggplot(data = risco_retorno_total_df_3, aes(x = desvpad_carteira, y = retorno_carteira, colour = condicao)) + 
+    geom_point(data = risco_retorno_total_df_3) +
+    ggtitle("Risco X Retorno das ações e carteiras") + 
+    labs(x = "Risco (Desvio-padrão)", y = "Retorno Esperado")
+```

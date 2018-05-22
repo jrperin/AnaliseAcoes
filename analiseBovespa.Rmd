@@ -1,0 +1,62 @@
+---
+title: "Case de Carteira Eficiente"
+output: html_notebook
+---
+
+# Preparação.
+
+Limpando o Console e o Global Environment.
+
+```{r}
+# Limpando o Console.
+cat("\014") 
+# Limpando o Global Environment.
+rm(list = ls())
+
+# Arquivo com os codigos de acoes a consultar (esse tem todas)
+
+csvFile = "/home/jrperin/Área de Trabalho/DataScience/analiseAcoesR/BovespaConsolidado/bovespa.csv"
+
+acoes <- read.csv(file = csvFile, header = T, sep = ",", quote = '"', skipNul = T)
+
+#limpo <- papeis[!complete.cases(papeis),]
+
+#duplicados <- acoes[duplicated(acoes)]
+
+# Selecionado apenas os mercados a vista
+# avista <- papeis[papeis$TIPO.DE.MERCADO == 10,] # <- Ja estao filtrados apenas os a vista
+
+#petr4 <- acoes[acoes$codneg == 'PETR4',]
+
+ultAno = acoes[substr(acoes$data, 0, 4) == '2017',]
+
+petr4 <- ultAno[ultAno$codneg == 'PETR4',]
+rm(list = 'petr4')
+
+#Pegando os valores unicos de codigos de acoes
+codAcoes <- ultAno$codneg[!duplicated(ultAno$codneg)]
+
+
+x <- aggregate(ultAno[, "totneg"], list(ultAno$codneg), mean)
+print(x)
+x2 = sort(x)
+x2
+
+
+print(codAcoes)
+
+summary(ultAno)
+
+
+if (!require("quantmod"))       { install.packages("quantmod") }
+library("quantmod")
+
+
+P = NULL
+# Cl = Preco de fechamento da acao
+tmp <- Cl(to.daily(eval(parse(text = 'PETR4.SA'))))
+   P <- cbind(P, tmp)
+   P
+
+
+```

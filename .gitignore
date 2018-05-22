@@ -1,0 +1,5 @@
+# Ignorar todos os arquivos CSV do Ibovespa
+
+/acoesCsv/*
+/Bovespa/*
+/BovespaConsolidado/*
